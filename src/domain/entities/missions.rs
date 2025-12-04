@@ -1,0 +1,50 @@
+use crate::{domain::value_objects::mission_model::MissionModel, infrastructure::database::schema::missions};
+use chrono::NaiveDateTime;
+use diesel::prelude::*;
+
+
+#[derive(Debug, Clone, Identifiable, Queryable, Selectable)]
+#[diesel(table_name = missions)]
+pub struct MissionEntity {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub chief_id: i32,
+    pub create_at: NaiveDateTime,
+    pub update_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = missions)]
+pub struct NewMission {
+    pub name: String,
+    pub description: String,
+    pub status: String,
+    pub chief_id: i32,
+}
+
+#[derive(Debug, Clone, AsChangeset)]
+#[diesel(table_name = missions)]
+pub struct UpdateMission {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    pub chief_id: i32,
+}
+
+
+impl MissionEntity {
+    pub fn to_model(&self, crew_count: i64) -> MissionModel {
+        MissionModel {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            status: self.status.clone(),
+            chief_id: self.chief_id,
+            crew_count,
+            created_at: self.create_at,
+            updated_at: self.update_at,
+        }   
+    }
+}
