@@ -1,6 +1,6 @@
 use anyhow::Result;
 use diesel::{
-    prelude::*,
+    PgConnection,
     r2d2::{ConnectionManager, Pool},
 };
 

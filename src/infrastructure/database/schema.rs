@@ -9,6 +9,12 @@ diesel::table! {
         password -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        #[max_length = 50]
+        display_name -> Varchar,
+        #[max_length = 512]
+        avatar_url -> Nullable<Varchar>,
+        #[max_length = 255]
+        avatar_public_id -> Nullable<Varchar>,
     }
 }
 
@@ -29,9 +35,9 @@ diesel::table! {
         #[max_length = 255]
         status -> Varchar,
         chief_id -> Int4,
-        create_at -> Timestamp,
-        update_at -> Timestamp,
-        delete_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        deleted_at -> Nullable<Timestamp>,
     }
 }
 

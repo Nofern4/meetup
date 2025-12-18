@@ -3,9 +3,10 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use anyhow::{Ok, Result};
 use axum::{
     Router,
-    routing::get,
-    http::{Method, StatusCode, header::{AUTHORIZATION, CONTENT_TYPE}},
-    response::Html,
+    http::{
+        Method, StatusCode,
+        header::{AUTHORIZATION, CONTENT_TYPE},
+    },
 };
 use tokio::net::TcpListener;
 use tower_http::{
@@ -19,35 +20,53 @@ use tracing::info;
 
 use crate::{
     config::config_model::DotEnvyConfig,
-    infrastructure::database::postgresql_connection::PgPoolSquad,
+    infrastructure::{database::postgresql_connection::PgPoolSquad, http::routers},
 };
 
 fn static_serve() -> Router {
-    let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("static");
+    let dir = "statics";
 
-    let service = ServeDir::new(&static_dir)
-        .not_found_service(ServeFile::new(static_dir.join("index.html")));
+    let service = ServeDir::new(dir).not_found_service(ServeFile::new(format!("{dir}/index.html")));
 
     Router::new().fallback_service(service)
 }
 
-fn api_serve() -> Router {
-    Router::new().fallback(|| async { (StatusCode::NOT_FOUND, "API not found") })
+fn api_serve(db_pool: Arc<PgPoolSquad>) -> Router {
+    Router::new()
+        .nest(
+            "/brawlers", 
+            routers::brawlers::routes(Arc::clone(&db_pool)))
+        .nest(
+            "/authentication", 
+            routers::authentication::routes(Arc::clone(&db_pool)))
+        .nest(
+            "/mission-management",
+            routers::mission_management::routes(Arc::clone(&db_pool)),
+        )
+        .nest(
+            "/crew",
+            routers::crew_operation::routes(Arc::clone(&db_pool)),
+        )
+        .nest(
+            "/mission",
+            routers::mission_operation::routes(Arc::clone(&db_pool)),
+        )
+        .nest(
+            "/view",
+            routers::mission_viewing::routes(Arc::clone(&db_pool)),
+        )
+        .fallback(|| async { (StatusCode::NOT_FOUND, "API not found") })
 }
 
-async fn hello_world() -> Html<&'static str> {
-    Html("<h1>Hello ja</h1>")
-}
-
-pub async fn start(config: Arc<DotEnvyConfig>, _db_pool: Arc<PgPoolSquad>) -> Result<()> {
+pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Result<()> {
     let app = Router::new()
-        .route("/", get(hello_world))     // ← This makes "/" show "Hello World"
-
         .merge(static_serve())
-        .nest("/api", api_serve())
-
-        .layer(TimeoutLayer::new(Duration::from_secs(config.server.timeout)))
+        .nest("/api", api_serve(Arc::clone(&db_pool)))
+        // .fallback(default_router::health_check)
+        // .route("/health_check", get(routers::default::health_check))
+        .layer(TimeoutLayer::new(Duration::from_secs(
+            config.server.timeout,
+        )))
         .layer(RequestBodyLimitLayer::new(
             (config.server.body_limit * 1024 * 1024).try_into()?,
         ))
@@ -79,6 +98,7 @@ pub async fn start(config: Arc<DotEnvyConfig>, _db_pool: Arc<PgPoolSquad>) -> Re
 
 async fn shutdown_signal() {
     let ctrl_c = async { tokio::signal::ctrl_c().await.expect("Fail ctrl + c") };
+
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
