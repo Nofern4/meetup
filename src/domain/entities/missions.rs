@@ -1,6 +1,5 @@
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
-use serde_json::de;
 
 use crate::{
     domain::value_objects::mission_model::MissionModel, infrastructure::database::schema::missions,
