@@ -1,6 +1,7 @@
 use std::{ sync::Arc};
 
 use axum::{Extension, Json, Router, extract::{Path, State}, http::StatusCode, middleware, response::IntoResponse, routing::{delete, patch, post}};
+use tracing::error;
 
 use crate::{
     application::use_cases::mission_management::MissionManagementUseCase,
@@ -9,14 +10,14 @@ use crate::{
             mission_management::MissionManagementRepository,
             mission_viewing::MissionViewingRepository,
         },
-        value_objects::mission_model::{AddMissionModel, EditMissionModel},
+        value_objects::mission_model::{NewMissionModel, UpdateMissionModel},
     }, infrastructure::{database::{postgresql_connection::PgPoolSquad, repositories::{mission_management::MissionManagementPostgres, mission_viewing::MissionViewingPostgres}}, http::middleware::auth::authorization},
 };
 
 pub async fn add<T1, T2>(
     State(mission_management_use_case): State<Arc<MissionManagementUseCase<T1, T2>>>,
     Extension(brawler_id): Extension<i32>,
-    Json(add_mission_model): Json<AddMissionModel>,
+    Json(add_mission_model): Json<NewMissionModel>,
 ) -> impl IntoResponse
 where
     T1: MissionManagementRepository + Send + Sync,
@@ -32,7 +33,16 @@ where
             });
             (StatusCode::CREATED, axum::Json(json_value)).into_response()
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => {
+            error!("Failed to add mission: {:?}", e);
+            let error_message = e.to_string();
+            let status = if error_message.contains("Mission name is too long") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(serde_json::json!({"message": error_message}))).into_response()
+        }
     }
 }
 
@@ -41,7 +51,7 @@ pub async fn edit<T1, T2>(
     State(mission_management_use_case): State<Arc<MissionManagementUseCase<T1, T2>>>,
     Extension(brawler_id): Extension<i32>,
     Path(mission_id): Path<i32>,
-    Json(edit_mission_model): Json<EditMissionModel>,
+    Json(edit_mission_model): Json<UpdateMissionModel>,
 ) -> impl IntoResponse
 where
     T1: MissionManagementRepository + Send + Sync,
@@ -91,7 +101,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     );
 
     Router::new()
-        .route("/", post(add))
+        .route("/add", post(add))
         .route("/{mission_id}", patch(edit))
         .route("/{mission_id}", delete(remove))
         .route_layer(middleware::from_fn(authorization))

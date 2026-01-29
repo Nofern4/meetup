@@ -73,6 +73,8 @@ where
                     "access_token": passport.access_token,
                     "token_type": passport.token_type,
                     "expires_in": passport.expires_in,
+                    "display_name": passport.display_name,
+                    "avatar_url": passport.avatar_url,
                     "message": "Login successfully"
                 })),
             )

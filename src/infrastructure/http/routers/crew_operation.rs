@@ -13,12 +13,14 @@ use crate::{
     application::use_cases::crew_operation::CrewOperationUseCase,
     domain::repositories::{
         crew_operation::CrewOperationRepository, mission_viewing::MissionViewingRepository,
+        transaction_provider::TransactionProvider,
     },
     infrastructure::{
         database::{
             postgresql_connection::PgPoolSquad,
             repositories::{
                 crew_operation::CrewOperationPostgres, mission_viewing::MissionViewingPostgres,
+                diesel_transaction::DieselTransaction,
             },
         },
         http::middleware::auth::authorization,
@@ -28,10 +30,12 @@ use crate::{
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let crew_operation_repository = CrewOperationPostgres::new(Arc::clone(&db_pool));
     let mission_viewing_repository = MissionViewingPostgres::new(Arc::clone(&db_pool));
+    let diesel_transaction = DieselTransaction::new(Arc::clone(&db_pool));
 
     let use_case = CrewOperationUseCase::new(
         Arc::new(crew_operation_repository),
         Arc::new(mission_viewing_repository),
+        Arc::new(diesel_transaction),
     );
 
     Router::new()
@@ -41,14 +45,15 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
         .with_state(Arc::new(use_case))
 }
 
-pub async fn join<T1, T2>(
-    State(crew_operation_use_case): State<Arc<CrewOperationUseCase<T1, T2>>>,
+pub async fn join<T1, T2, T3>(
+    State(crew_operation_use_case): State<Arc<CrewOperationUseCase<T1, T2, T3>>>,
     Extension(brawler_id): Extension<i32>,
     Path(mission_id): Path<i32>,
 ) -> impl IntoResponse
 where
     T1: CrewOperationRepository + Send + Sync + 'static,
     T2: MissionViewingRepository + Send + Sync,
+    T3: TransactionProvider + Send + Sync,
 {
     match crew_operation_use_case.join(mission_id, brawler_id).await {
         Ok(_) => (
@@ -63,14 +68,15 @@ where
     }
 }
 
-pub async fn leave<T1, T2>(
-    State(crew_operation_use_case): State<Arc<CrewOperationUseCase<T1, T2>>>,
+pub async fn leave<T1, T2, T3>(
+    State(crew_operation_use_case): State<Arc<CrewOperationUseCase<T1, T2, T3>>>,
     Extension(brawler_id): Extension<i32>,
     Path(mission_id): Path<i32>,
 ) -> impl IntoResponse
 where
     T1: CrewOperationRepository + Send + Sync + 'static,
     T2: MissionViewingRepository + Send + Sync,
+    T3: TransactionProvider + Send + Sync,
 {
     match crew_operation_use_case.leave(mission_id, brawler_id).await {
         Ok(_) => (

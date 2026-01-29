@@ -1,11 +1,8 @@
 use std::sync::Arc;
-
 use anyhow::Result;
 
-use crate::domain::{
-    repositories::mission_viewing::MissionViewingRepository,
-    value_objects::{brawler_model::BrawlerModel, mission_filter::MissionFilter, mission_model::MissionModel},
-};
+use crate::domain::{repositories::mission_viewing::MissionViewingRepository, value_objects::{mission_filter::MissionFilter, mission_model::MissionModel}};
+
 pub struct MissionViewingUseCase<T>
 where
     T: MissionViewingRepository + Send + Sync,
@@ -17,27 +14,31 @@ impl<T> MissionViewingUseCase<T>
 where
     T: MissionViewingRepository + Send + Sync,
 {
-    pub fn new(mission_viewing_repository: Arc<T>) -> Self {
+     pub fn new(mission_viewing_repository: Arc<T>) -> Self {
         Self {
             mission_viewing_repository,
         }
     }
 
-    pub async fn get_one(&self, mission_id: i32) -> Result<MissionModel> {
+
+    pub async fn view_detail(&self, mission_id: i32) -> Result<MissionModel> {
         let crew_count = self
             .mission_viewing_repository
             .crew_counting(mission_id)
             .await?;
 
-        let model = self.mission_viewing_repository.get_one(mission_id).await?;
+        let model: crate::domain::entities::missions::MissionEntity = self
+            .mission_viewing_repository
+            .view_detail(mission_id)
+            .await?;
 
-        let result = model.to_model(crew_count);
+        let result = model.to_model(crew_count.into());
 
         Ok(result)
     }
 
-    pub async fn get_all(&self, filter: &MissionFilter) -> Result<Vec<MissionModel>> {
-        let models = self.mission_viewing_repository.get_all(filter).await?;
+    pub async fn get(&self, filter: &MissionFilter) -> Result<Vec<MissionModel>> {
+        let models: Vec<crate::domain::entities::missions::MissionEntity> = self.mission_viewing_repository.get(filter).await?;
 
         let mut result = Vec::new();
 
@@ -48,18 +49,10 @@ where
                 .await
                 .unwrap_or(0);
 
-            result.push(model.to_model(crew_count));
+            result.push(model.to_model(crew_count.into()));
         }
 
         Ok(result)
     }
-    
-    pub async fn get_mission_count(&self, mission_id: i32) -> Result<Vec<BrawlerModel>> {
-        let result = self
-            .mission_viewing_repository
-            .get_mission_count(mission_id)
-            .await?;
 
-        Ok(result)
-    }
 }

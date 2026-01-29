@@ -1,18 +1,9 @@
+use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
-use diesel::{
-    ExpressionMethods, RunQueryDsl, SelectableHelper, insert_into,
-    query_dsl::methods::{FilterDsl, SelectDsl},
-};
-use std::sync::Arc;
-
-use crate::{
-    domain::{
-        entities::brawlers::{BrawlerEntity, RegisterBrawlerEntity},
-        repositories::brawlers::BrawlerRepository, value_objects::{base64_image::Base64Image, uploaded_image::UploadedImage},
-    },
-    infrastructure::{cloudinary::UploadImageOptions, database::{postgresql_connection::PgPoolSquad, schema::brawlers}},
-};
+use diesel::{ExpressionMethods, RunQueryDsl, dsl::insert_into, QueryDsl, SelectableHelper, BoolExpressionMethods};
+use crate::infrastructure::database::{postgresql_connection::PgPoolSquad, schema::{brawlers, crew_memberships, missions}};
+use crate::domain::{entities::{brawlers::{BrawlerEntity, RegisterBrawlerEntity}, missions::MissionEntity}, repositories::brawlers::BrawlerRepository};
 
 pub struct BrawlerPostgres {
     db_pool: Arc<PgPoolSquad>,
@@ -37,7 +28,7 @@ impl BrawlerRepository for BrawlerPostgres {
         Ok(result)
     }
 
-    async fn find_by_username(&self, username: &String) -> Result<BrawlerEntity> {
+    async fn find_by_username(&self, username: String) -> Result<BrawlerEntity> {
         let mut connection = Arc::clone(&self.db_pool).get()?;
 
         let result = brawlers::table
@@ -47,25 +38,36 @@ impl BrawlerRepository for BrawlerPostgres {
 
         Ok(result)
     }
-    async fn upload_avatar(
-        &self,
-        brawler_id: i32,
-        base64_image: Base64Image,
-        option: UploadImageOptions,
-    ) -> Result<UploadedImage> {
-        let uploaded_image =    
-            crate::infrastructure::cloudinary::upload(base64_image, option).await?;
 
-        let mut conn = Arc::clone(&self.db_pool).get()?;
+    async fn update_avatar(&self, _id: i32, avatar_url: String) -> Result<String> {
+        // TODO: Implement actual database update when schema supports avatar
+        Ok(avatar_url)
+    }
 
-        diesel::update(brawlers::table)
-            .filter(brawlers::id.eq(brawler_id))
-            .set((
-                brawlers::avatar_url.eq(uploaded_image.url.clone()),
-                brawlers::avatar_public_id.eq(uploaded_image.public_id.clone()),
-            ))
-            .execute(&mut conn)?;
+    async fn crew_counting(&self, mission_id: i32) -> Result<u32> {
+        let mut connection = Arc::clone(&self.db_pool).get()?;
+        let count = crew_memberships::table
+            .filter(crew_memberships::mission_id.eq(mission_id))
+            .count()
+            .get_result::<i64>(&mut connection)?;
+        Ok(count as u32)
+    }
 
-        Ok(uploaded_image)
+    async fn get_missions(&self, brawler_id: i32) -> Result<Vec<MissionEntity>> {
+        let mut connection = Arc::clone(&self.db_pool).get()?;
+        
+        let subquery = crew_memberships::table
+            .filter(crew_memberships::brawler_id.eq(brawler_id))
+            .select(crew_memberships::mission_id);
+
+        let missions = missions::table
+            .filter(
+                missions::chief_id.eq(brawler_id)
+                .or(missions::id.eq_any(subquery))
+            )
+            .filter(missions::deleted_at.is_null())
+            .select(MissionEntity::as_select())
+            .load(&mut connection)?;
+        Ok(missions)
     }
 }

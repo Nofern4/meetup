@@ -1,11 +1,11 @@
 use anyhow::{Ok, Result};
 use async_trait::async_trait;
-use diesel::{ExpressionMethods, RunQueryDsl, dsl::delete, insert_into};
+use diesel::{ExpressionMethods, RunQueryDsl, dsl::delete, insert_into, r2d2::{ConnectionManager, PooledConnection}, PgConnection};
 use std::sync::Arc;
 
 use crate::{
     domain::{
-        entities::crew_memberships::CrewMemberShips,
+        entities::crew_memberships::CrewMembershipEntity,
         repositories::crew_operation::CrewOperationRepository,
     },
     infrastructure::database::{postgresql_connection::PgPoolSquad, schema::crew_memberships},
@@ -23,7 +23,7 @@ impl CrewOperationPostgres {
 
 #[async_trait]
 impl CrewOperationRepository for CrewOperationPostgres {
-    async fn join(&self, crew_member_ships: CrewMemberShips) -> Result<()> {
+    async fn join(&self, crew_member_ships: CrewMembershipEntity) -> Result<()> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
         insert_into(crew_memberships::table)
             .values(crew_member_ships)
@@ -31,12 +31,35 @@ impl CrewOperationRepository for CrewOperationPostgres {
         Ok(())
     }
 
-    async fn leave(&self, crew_member_ships: CrewMemberShips) -> Result<()> {
+    async fn leave(&self, crew_member_ships: CrewMembershipEntity) -> Result<()> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
         delete(crew_memberships::table)
             .filter(crew_memberships::brawler_id.eq(crew_member_ships.brawler_id))
             .filter(crew_memberships::mission_id.eq(crew_member_ships.mission_id))
             .execute(&mut conn)?;
+        Ok(())
+    }
+
+    fn for_insert_transaction_test(
+        &self,
+        conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+        crew_memberships: CrewMembershipEntity,
+    ) -> Result<()> {
+         insert_into(crew_memberships::table)
+            .values(crew_memberships)
+            .execute(conn)?;
+        Ok(())
+    }
+
+    fn for_delete_transaction_test(
+        &self,
+        conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
+        crew_memberships: CrewMembershipEntity,
+    ) -> Result<()> {
+         delete(crew_memberships::table)
+            .filter(crew_memberships::brawler_id.eq(crew_memberships.brawler_id))
+            .filter(crew_memberships::mission_id.eq(crew_memberships.mission_id))
+            .execute(conn)?;
         Ok(())
     }
 }

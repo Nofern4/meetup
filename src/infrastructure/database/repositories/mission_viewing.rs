@@ -1,20 +1,11 @@
 use std::sync::Arc;
-
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use diesel::{ExpressionMethods, PgTextExpressionMethods, QueryDsl, RunQueryDsl, SelectableHelper};
 
-use crate::{
-    domain::{
-        entities::missions::MissionEntity,
-        repositories::mission_viewing::MissionViewingRepository,
-        value_objects::{brawler_model::BrawlerModel, mission_filter::MissionFilter},
-    },
-    infrastructure::database::{
-        postgresql_connection::PgPoolSquad,
-        schema::{crew_memberships, missions},
-    },
-};
+use crate::{domain::{entities::missions::MissionEntity, repositories::mission_viewing::MissionViewingRepository, value_objects::mission_filter::MissionFilter}, infrastructure::database::{postgresql_connection::PgPoolSquad, schema::{crew_memberships, missions}}};
+
+#[derive(Clone)]
 pub struct MissionViewingPostgres {
     db_pool: Arc<PgPoolSquad>,
 }
@@ -27,20 +18,9 @@ impl MissionViewingPostgres {
 
 #[async_trait]
 impl MissionViewingRepository for MissionViewingPostgres {
-    async fn crew_counting(&self, mission_id: i32) -> Result<i64> {
+    async fn view_detail(&self, mission_id: i32) -> Result<MissionEntity> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
-        let value = crew_memberships::table
-            .filter(crew_memberships::mission_id.eq(mission_id))
-            .count()
-            .first::<i64>(&mut conn)?;
-
-        let count = i64::try_from(value)?;
-        Ok(count)
-    }
-
-    async fn get_one(&self, mission_id: i32) -> Result<MissionEntity> {
-        let mut conn = Arc::clone(&self.db_pool).get()?;
         let result = missions::table
             .filter(missions::id.eq(mission_id))
             .filter(missions::deleted_at.is_null())
@@ -50,72 +30,40 @@ impl MissionViewingRepository for MissionViewingPostgres {
         Ok(result)
     }
 
-    async fn get_all(&self, mission_filter: &MissionFilter) -> Result<Vec<MissionEntity>> {
+    async fn get(&self, filter: &MissionFilter) -> Result<Vec<MissionEntity>> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
         let mut query = missions::table
             .filter(missions::deleted_at.is_null())
             .into_boxed();
 
-        if let Some(status) = &mission_filter.status {
-            let status_string = status.to_string();
-            query = query.filter(missions::status.eq(status_string));
-        };
-        if let Some(name) = &mission_filter.name {
-            query = query.filter(missions::name.ilike(format!("%{}%", name)));
+        if let Some(status) = &filter.status {
+            query = query.filter(missions::status.eq(status.to_string()));
         };
 
-        let value = query
+        if let Some(name) = &filter.name {
+            query = query.filter(missions::name.ilike(format!("%{}%", name)));
+        }
+
+        let results = query
             .select(MissionEntity::as_select())
             .order_by(missions::created_at.desc())
             .load::<MissionEntity>(&mut conn)?;
 
-        Ok(value)
+        Ok(results)
     }
-    async fn get_mission_count(&self, mission_id: i32) -> Result<Vec<BrawlerModel>> {
+
+    async fn crew_counting(&self, mission_id: i32) -> Result<u32> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
-        let sql = r#"
-            SELECT 
-               COALESCE(b.avatar_url, '') AS avatar_url
-               COALESCE(s.success_count, 0) AS success_count,
-               COALESCE(j.joined_count, 0) AS joined_count,
-            FROM 
-                crew_memberships cm
-            INNER JOIN 
-                brawlers b ON b.id = cm.brawler_id 
-            LEFT JOIN 
-                (
-                    SELECT 
-                        cm2.brawler_id, 
-                        COUNT(*) AS success_count
-                    FROM 
-                        crew_memberships cm2
-                    INNER JOIN 
-                        missions m2 ON m2.id = cm2.mission_id
-                    WHERE 
-                        m2.status = 'completed' AND m2.id = $1
-                    GROUP BY 
-                        cm2.brawler_id
-                ) s ON s.brawler_id = cm.brawler_id
-            LEFT JOIN 
-                (
-                    SELECT 
-                        cm3.brawler_id, 
-                        COUNT(*) AS joined_count
-                    FROM 
-                        crew_memberships cm3
-                    GROUP BY 
-                        cm3.brawler_id
-                ) j ON j.brawler_id = b.id
-            WHERE 
-                cm.mission_id = $1
-        "#;
+        let result = crew_memberships::table
+            .filter(crew_memberships::mission_id.eq(mission_id))
+            .count()
+            .first::<i64>(&mut conn)?;
 
-        let result = diesel::sql_query(sql)
-            .bind::<diesel::sql_types::Int4, _>(mission_id)
-            .load::<BrawlerModel>(&mut conn)?;
+        let count = u32::try_from(result)?;
 
-        Ok(result)
+        Ok(count)
     }
+
 }

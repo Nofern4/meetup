@@ -35,4 +35,5 @@ async fn main() {
     start(Arc::new(dotenvy_env), Arc::new(postgres_pool))
         .await
         .expect("Failed to start server");
-}
+
+    }

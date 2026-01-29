@@ -1,12 +1,14 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use crate::{domain::entities::{
+    missions::NewMission, missions::UpdateMission
+},
+    domain::value_objects::mission_statuses::MissionStatuses,
 
-use crate::domain::{
-    entities::missions::{AddMissionEntity, EditMissionEntity},
-    value_objects::mission_statuses::MissionStatuses,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+
+#[derive(Debug, Clone, Serialize, Deserialize,PartialEq)]
 pub struct MissionModel {
     pub id: i32,
     pub name: String,
@@ -14,38 +16,44 @@ pub struct MissionModel {
     pub status: String,
     pub chief_id: i32,
     pub crew_count: i64,
-    pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub created_at: NaiveDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AddMissionModel {
+
+#[derive(Debug, Clone, Serialize, Deserialize,PartialEq)]
+pub struct NewMissionModel {
     pub name: String,
+    #[serde(default)]
     pub description: Option<String>,
 }
 
-impl AddMissionModel {
-    pub fn to_entity(&self, chief_id: i32) -> AddMissionEntity {
-        AddMissionEntity {
+impl NewMissionModel {
+    pub fn to_entity(&self, chief_id: i32) -> NewMission {
+        NewMission {
             name: self.name.clone(),
-            description: self.description.clone(),
+            description: self.description.clone().unwrap_or_default(),
             status: MissionStatuses::Open.to_string(),
             chief_id,
         }
     }
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EditMissionModel {
+#[derive(Debug, Clone, Serialize, Deserialize,PartialEq)]
+pub struct UpdateMissionModel {
+    #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
 }
 
-impl EditMissionModel {
-    pub fn to_entity(&self, chief_id: i32) -> EditMissionEntity {
-        EditMissionEntity {
+impl UpdateMissionModel {
+    pub fn to_entity(&self, chief_id: i32) -> UpdateMission {
+        UpdateMission {
             name: self.name.clone(),
             description: self.description.clone(),
+            status: self.status.clone(),
             chief_id,
         }
     }

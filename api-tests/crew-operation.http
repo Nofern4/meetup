@@ -1,0 +1,14 @@
+### Variable Definitions
+@base_url = http://127.0.0.1:8000/api
+@menta_token = eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjE2LCJleHAiOjE3Njc1OTU1NjEsImlhdCI6MTc2NjY0NTE2MX0.RTyCLGfndbc26z5MtaLzY8o5TSXi_E0wLnGcae0vvaY
+### join mission
+# @prompt mission_id Mission ID to Join
+POST {{base_url}}/crew/join/{{mission_id}}
+Content-Type: application/json
+Authorization: Bearer {{menta_token}}
+
+### leave mission
+# @prompt mission_id Mission ID to Leave
+DELETE {{base_url}}/crew/leave/{{mission_id}}
+Content-Type: application/json
+Authorization: Bearer {{menta_token}}
